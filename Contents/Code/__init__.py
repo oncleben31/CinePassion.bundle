@@ -3,14 +3,10 @@
 # V1.1 By oncleben31 (http://oncleben31.cc) - 2010
 # 
 
-
 #TODO: tester deux ID (ex: com.plexapp.agents.cinepassion://oneID/theotherID)
 #TODO: tester declaration des provider secondaire pour voir si ca foncitonne
 #TODO: Est il possible de forcer la non utilisation du cache.
 #TODO: Essayer de fair une Agent secondaire pour IMDB juste pour retrouver les informations de type text
-#TODO: Est il possible d'etre Agent primaire et secondaire.
-
-
 
 import datetime, unicodedata, re
 
@@ -19,6 +15,7 @@ CP_API_KEY = '38ca89564b2259401518960f7a06f94b/'
 # ask a free one on this page : http://passion-xbmc.org/demande-clef-api-api-key-request/
 
 CP_API_URL = 'http://passion-xbmc.org/scraper/API/1/'
+#CP_API_URL = 'http://passion-xbmc.org/scraper_dev/API/1/'
 CP_API_SEARCH = 'Movie.Search/Title/fr/XML/'
 CP_API_INFO = 'Movie.GetInfo/ID/fr/XML/'
 
@@ -26,13 +23,12 @@ GOOGLE_JSON_URL = 'http://ajax.googleapis.com/ajax/services/search/web?v=1.0&rsz
 BING_JSON_URL   = 'http://api.bing.net/json.aspx?AppId=BAFE92EAA23CD237BCDAA5AB39137036739F7357&Version=2.2&Query=%s&Sources=web&Web.Count=8&JsonType=raw'
 
 def Start():
-  HTTP.CacheTime = CACHE_1WEEK
+  HTTP.CacheTime = CACHE_1DAY
   #HTTP.CacheTime = CACHE_1MINUTE
 
 class CinepassionAgent(Agent.Movies):
   name = 'Ciné-Passion'
-  languages = ['Francais']
-  #languages = [Locale.Language.English]
+  languages = ['fr']
   
   def search(self, results, media, lang):
 	
@@ -40,11 +36,15 @@ class CinepassionAgent(Agent.Movies):
 	searchURL = CP_API_URL + CP_API_SEARCH + CP_API_KEY + String.Quote(url = self.stripAccents(media.name.encode('utf-8')), usePlus = True)
 	
 	try:
-		searchXMLresult = XML.ElementFromURL(searchURL)
+		searchXMLresult = XML.ElementFromURL(searchURL, cacheTime=CACHE_1DAY)
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(searchXMLresult, media.name.encode('utf-8'))
-	except:
+		
+	except HTTPError, e:
+		Log("[cine-passion Agent] : Code HTTP de retour différent de 200 : "+ e)
+	except Exception, e :
+		Log("[cine-passion Agent] : EXCEPT1 " + str(e))
 		hasError = True
 		Log("[cine-passion Agent] : Ciné-Passion Agent has return an unkown error wile retrieving search result for '" + media.name.encode('utf-8') +"'")
 	
@@ -61,14 +61,22 @@ class CinepassionAgent(Agent.Movies):
 	
 	try:
 		#Ask for movie information
-		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO  + CP_API_KEY + metadata.id)
+		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO  + CP_API_KEY + metadata.id, cacheTime=CACHE_1DAY)
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(updateXMLresult, metadata.title)
-	except:
+	except HTTPError, e:
+		Log("[cine-passion Agent] : Code HTTP de retour différent de 200 : "+ e)
+	except Exception, e :
+		Log("[cine-passion Agent] : EXCEPT2 " + str(e))
 		hasError = True
-		Log("[cine-passion Agent] ERROR : Agent has return an unkown error wile retrieving information for '" + metadata.title +"'")
-		
+		if metadata.title != None :
+			Log("[cine-passion Agent] ERROR : Agent has return an unkown error wile retrieving information for '" + metadata.title +"'")
+		else :
+			Log("[cine-passion Agent] DEBUG : " + media.__repr__ )
+			Log("[cine-passion Agent] DEBUG : " + media.__str__)
+			Log("[cine-passion Agent] ERROR : Agent has return an unkown error wile retrieving information for '" + media.name +"'")
+			
 	if (hasError == False) :
 		#genre
 		metadata.genres.clear()
@@ -119,15 +127,16 @@ class CinepassionAgent(Agent.Movies):
 					type = image.get('type')
 					if (type == 'Poster'):
 						try:
-							metadata.posters[url] = Proxy.Preview(HTTP.Request(thumbUrl), sort_order = indexImages)
-							#Log('[cine-passion Agent] Fetching ' + thumbUrl + ' with order to : ' + str(indexImages))
-						except:
+							metadata.posters[url] = Proxy.Preview(HTTP.Request(thumbUrl, cacheTime=CACHE_1MONTH), sort_order = indexImages)
+						except	Exception, e :
+							Log("[cine-passion Agent] : EXCEPT3 " + str(e))
 							Log('[cine-passion Agent] Error when fetching ' + thumbUrl)
 					elif (type == 'Fanart'):
 						try:
-							metadata.art[url] = Proxy.Preview(HTTP.Request(thumbUrl), sort_order = indexImages)
+							metadata.art[url] = Proxy.Preview(HTTP.Request(thumbUrl, cacheTime=CACHE_1MONTH), sort_order = indexImages)
 							#Log('[cine-passion Agent] Fetching ' + thumbUrl + ' with order to : ' + str(indexImages))
-						except:
+						except	Exception, e :
+							Log("[cine-passion Agent] : EXCEPT4 " + str(e))
 							Log('[cine-passion Agent] Error when fetching ' + thumbUrl)
 				indexImages = indexImages + 1
 		
@@ -170,7 +179,7 @@ class CinepassionAgent(Agent.Movies):
 		for movie in XMLresult.xpath("//movie"):
 			#find movie information (id, title and year)
 			id = movie.find('id').text
-			name = movie.find('title').text.replace('&#39;','\'') # Patch to suppress some HTML code in title.
+			name = movie.find('title').text.replace('&#39;','\'').replace('&#338;', 'Œ') # Patch to suppress some HTML code in title.
 			originalName = movie.find('originaltitle').text
 			year = int(movie.find('year').text) 
 			lang = lang
@@ -212,7 +221,8 @@ class CinepassionAgent(Agent.Movies):
 						hasResults = True
 						urlKey = 'unescapedUrl'
 						titleKey = 'title'
-		except:
+		except Exception, e :
+			Log("[cine-passion Agent] : EXCEPT5 " + str(e))
 			Log('[cine-passion Agent] Error when fetching ' + s)
 		
 		if hasResults :
@@ -224,17 +234,22 @@ class CinepassionAgent(Agent.Movies):
 				
 				url = item[urlKey]
 				title = self.stripHTMLTags(item[titleKey])
-			
+				
 				try: 
 					m = re.match('(.*)[ ]+\(([12][0-9]{3})(/[A-Z]+)?\).*$', title)
 					if m:
 					  name,yearString = (m.group(1), m.group(2))
 					  year = int(yearString)
-		
+					else:
+					  year = None
+							
 					m = re.match('http://www.allocine.fr/film/fichefilm_gen_cfilm=([0-9]*).html', url)
 					if m:
-					  id = m.group(1)
-		  			
+						id = m.group(1)
+		  			else:
+						#If no id the results is not on allocine. skip it
+						continue
+						
 					# No way to find original name so name is used two times.
 					finalScore = score - self.scoreResultPenalty(media, year, name, name)
 		
@@ -244,7 +259,8 @@ class CinepassionAgent(Agent.Movies):
 					score = score - 1
 					goodItem = goodItem + 1
 			
-				except:
+				except Exception, e :
+					Log("[cine-passion Agent] : EXCEPT6 " + str(e))
 					Log('[cine-passion Agent] Error when parsing ' + url)
 		
 			Log('trouvé '+ str(goodItem-1))
@@ -274,15 +290,23 @@ class CinepassionAgent(Agent.Movies):
 	try:
 		hasError = False
 		quota = XMLresult.find('quota')
-		used = quota.get('use')
-		authorized =  quota.get('authorize')
-		resetDate = quota.get('reset_date')
-		Log('Quota : used: ' + used + " on "+ authorized + " | reset date: "+ resetDate)
-		if XMLresult.find('ID').text == "-1":
-			Log('WARNING: Quota reached, no more result before reset.')
-			hasError = True
-	except:
-		hasError = False
+		if quota != None:
+			used = quota.get('use')
+			authorized =  quota.get('authorize')
+			resetDate = quota.get('reset_date')
+			Log('Quota : used: ' + used + " on "+ authorized + " | reset date: "+ resetDate)
+		
+		tagID = XMLresult.find('movie/id')
+		#Double check because root element is different when quota reach.
+		if tagID != None:
+			if tagID.text == "-1":			
+				Log('WARNING: Quota reached, no more result before reset.')
+				hasError = True
+		
+	except	Exception , e:
+		Log("[cine-passion Agent] : DEBUG EXCEPT7" + str(e))
+		hasError = True
+		
 	return hasError
 	
   def checkErrors(self, XMLresult, name):
@@ -295,10 +319,12 @@ class CinepassionAgent(Agent.Movies):
 		
 		if hasError == False:
 			#Verification du quotas
-			hasError = self.checkQuota(searchXMLresult)
-		
-	except:
-		harError = True
+			hasError = self.checkQuota(XMLresult)
+			
+	except Exception , e:
+		Log("[cine-passion Agent] : EXCEPT8" + str(e))
+		hasError = True
+	
 	return hasError
 
   def stripAccents(self, str):
