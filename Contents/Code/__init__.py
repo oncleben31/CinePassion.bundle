@@ -15,7 +15,6 @@ CP_API_KEY = '38ca89564b2259401518960f7a06f94b/'
 # ask a free one on this page : http://passion-xbmc.org/demande-clef-api-api-key-request/
 
 CP_API_URL = 'http://passion-xbmc.org/scraper/API/1/'
-#CP_API_URL = 'http://passion-xbmc.org/scraper_dev/API/1/'
 CP_API_SEARCH = 'Movie.Search/Title/fr/XML/'
 CP_API_INFO = 'Movie.GetInfo/ID/fr/XML/'
 
@@ -41,7 +40,7 @@ class CinepassionAgent(Agent.Movies):
 		#Test if DDB have return an error
 		hasError = self.checkErrors(searchXMLresult, media.name.encode('utf-8'))
 		
-	except HTTPError, e:
+	except Ex.HTTPError, e:
 		Log("[cine-passion Agent] : Code HTTP de retour différent de 200 : "+ e)
 	except Exception, e :
 		Log("[cine-passion Agent] : EXCEPT1 " + str(e))
@@ -65,7 +64,7 @@ class CinepassionAgent(Agent.Movies):
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(updateXMLresult, metadata.title)
-	except HTTPError, e:
+	except Ex.HTTPError, e:
 		Log("[cine-passion Agent] : Code HTTP de retour différent de 200 : "+ e)
 	except Exception, e :
 		Log("[cine-passion Agent] : EXCEPT2 " + str(e))
@@ -202,6 +201,9 @@ class CinepassionAgent(Agent.Movies):
 	GOOGLE_JSON_NOQUOTES = GOOGLE_JSON_URL % String.Quote(normalizedName + searchYear, usePlus=True) + '+site:allocine.fr/film/fichefilm_gen_cfilm'
 	BING_JSON = BING_JSON_URL % String.Quote(normalizedName + searchYear, usePlus=True) + '+site:allocine.fr/film'
 	
+	#Reinit classment score since CinePassion can shift good movies.
+	score = 99
+	
 	for s in [GOOGLE_JSON_QUOTES, GOOGLE_JSON_NOQUOTES, BING_JSON]:
 	
 		hasResults = False
@@ -252,7 +254,6 @@ class CinepassionAgent(Agent.Movies):
 						
 					# No way to find original name so name is used two times.
 					finalScore = score - self.scoreResultPenalty(media, year, name, name)
-		
 					results.Append(MetadataSearchResult(id =id, name=name, year=year, lang=lang, score=finalScore))
 
 					# First results should be more acruate.
@@ -357,6 +358,8 @@ class CinepassionAgent(Agent.Movies):
 	originalNameDist = Util.LevenshteinDistance(media.name.lower(), originalName.lower())
 	minDist = min(nameDist, originalNameDist)
 	scorePenalty = scorePenalty + minDist * 2
+#	Log('media : '+ name)
+#	Log('DEBUG nameDist: '+ str(nameDist))
 
 	return scorePenalty
 	
