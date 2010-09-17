@@ -1,12 +1,13 @@
 #
 # Plex Movie Metadata Agent using Ciné-passion database (French communauty)
-# V1.1 By oncleben31 (http://oncleben31.cc) - 2010
+# V1.2 By oncleben31 (http://oncleben31.cc) - 2010
 # 
 
 #TODO: tester deux ID (ex: com.plexapp.agents.cinepassion://oneID/theotherID)
 #TODO: tester declaration des provider secondaire pour voir si ca foncitonne
 #TODO: Est il possible de forcer la non utilisation du cache.
 #TODO: Essayer de fair une Agent secondaire pour IMDB juste pour retrouver les informations de type text
+#TODO: Est il possible de changer le nom dans le Update()
 
 import datetime, unicodedata, re
 
@@ -15,8 +16,8 @@ CP_API_KEY = '38ca89564b2259401518960f7a06f94b/'
 # ask a free one on this page : http://passion-xbmc.org/demande-clef-api-api-key-request/
 
 CP_API_URL = 'http://passion-xbmc.org/scraper/API/1/'
-CP_API_SEARCH = 'Movie.Search/Title/fr/XML/'
-CP_API_INFO = 'Movie.GetInfo/ID/fr/XML/'
+CP_API_SEARCH = 'Movie.Search/Title/%s/XML/'
+CP_API_INFO = 'Movie.GetInfo/ID/%s/XML/'
 
 GOOGLE_JSON_URL = 'http://ajax.googleapis.com/ajax/services/search/web?v=1.0&rsz=large&q=%s'
 BING_JSON_URL   = 'http://api.bing.net/json.aspx?AppId=BAFE92EAA23CD237BCDAA5AB39137036739F7357&Version=2.2&Query=%s&Sources=web&Web.Count=8&JsonType=raw'
@@ -27,12 +28,12 @@ def Start():
 
 class CinepassionAgent(Agent.Movies):
   name = 'Ciné-Passion'
-  languages = ['fr']
+  languages = ['fr', 'en']
   
   def search(self, results, media, lang):
 	
   	#Launch search on media name using name without accents.
-	searchURL = CP_API_URL + CP_API_SEARCH + CP_API_KEY + String.Quote(url = self.stripAccents(media.name.encode('utf-8')), usePlus = True)
+	searchURL = CP_API_URL + CP_API_SEARCH % lang + CP_API_KEY + String.Quote(url = self.stripAccents(media.name.encode('utf-8')), usePlus = True)
 	
 	try:
 		searchXMLresult = XML.ElementFromURL(searchURL, cacheTime=CACHE_1DAY)
@@ -60,7 +61,7 @@ class CinepassionAgent(Agent.Movies):
 	
 	try:
 		#Ask for movie information
-		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO  + CP_API_KEY + metadata.id, cacheTime=CACHE_1DAY)
+		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO % lang + CP_API_KEY + metadata.id, cacheTime=CACHE_1DAY)
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(updateXMLresult, metadata.title)
@@ -106,6 +107,10 @@ class CinepassionAgent(Agent.Movies):
 		#Original title.
 		originalTitle = updateXMLresult.find('originaltitle').text
 		metadata.original_title = originalTitle
+		
+		#title
+		#Doesn't work for the moment.
+		metadata.title = updateXMLresult.find('title').text
 		
 		#metadata.tagline = updateXMLresult.find('tagline').text  
 		#tagline tag ignored since there are not real tagline in Ciné-passion DDB
@@ -186,7 +191,7 @@ class CinepassionAgent(Agent.Movies):
 			finalScore = score - self.scoreResultPenalty(media, year, name, originalName)
 			#The movie information are added to the result
 			results.Append(MetadataSearchResult(id =id, name=name, year=year, lang=lang, score=finalScore))
-
+			
 			# First results should be more acruate.
 			score = score - 1
 	
@@ -255,7 +260,7 @@ class CinepassionAgent(Agent.Movies):
 					# No way to find original name so name is used two times.
 					finalScore = score - self.scoreResultPenalty(media, year, name, name)
 					results.Append(MetadataSearchResult(id =id, name=name, year=year, lang=lang, score=finalScore))
-
+					
 					# First results should be more acruate.
 					score = score - 1
 					goodItem = goodItem + 1
