@@ -1,0 +1,24 @@
+[
+
+        {
+                "id":                   "pref_rating_source",
+                "label":                "Rating/Notations source",
+                "type":         "enum",
+                "values":       ["allocine", "imdb", "cinepassion"],
+                "default":      "allocine"
+        },
+		{
+                "id":                   "pref_content_rating",
+                "label":                "Classification",
+                "type":         "enum",
+                "values":       ["France", "USA"],
+                "default":      "France"
+        },
+		{
+                "id":                   "pref_cache",
+                "label":                "Cache",
+                "type":         "enum",
+                "values":       ["1 jour/day", "1 semaine/week", "1 mois/month"],
+                "default":      "1 semaine/week"
+        }
+]

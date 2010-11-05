@@ -1,15 +1,11 @@
 #
 # Plex Movie Metadata Agent using Ciné-passion database (French communauty)
-# V1.2 By oncleben31 (http://oncleben31.cc) - 2010
+# V1.3 By oncleben31 (http://oncleben31.cc) - 2010
 # 
 
-#TODO: tester deux ID (ex: com.plexapp.agents.cinepassion://oneID/theotherID)
-#TODO: tester declaration des provider secondaire pour voir si ca foncitonne
-#TODO: Est il possible de forcer la non utilisation du cache.
 #TODO: Essayer de fair une Agent secondaire pour IMDB juste pour retrouver les informations de type text
-#TODO: Est il possible de changer le nom dans le Update()
 
-import datetime, unicodedata, re
+import datetime, unicodedata, re, urllib2
 
 CP_API_KEY = '38ca89564b2259401518960f7a06f94b/'
 # WARNING : If you want to use the Ciné-Passion DDB for your project, don't use this key but 
@@ -22,21 +18,44 @@ CP_API_INFO = 'Movie.GetInfo/ID/%s/XML/'
 GOOGLE_JSON_URL = 'http://ajax.googleapis.com/ajax/services/search/web?v=1.0&rsz=large&q=%s'
 BING_JSON_URL   = 'http://api.bing.net/json.aspx?AppId=BAFE92EAA23CD237BCDAA5AB39137036739F7357&Version=2.2&Query=%s&Sources=web&Web.Count=8&JsonType=raw'
 
+CP_COEFF_YEAR = 3
+CP_COEFF_TITLE = 2
+CP_DATE_PENALITY = 25
+CP_RESULT_POS_PENALITY = 1
+
+CP_CACHETIME_CP_SEARCH = CACHE_1DAY
+CP_CACHETIME_CP_FANART = CACHE_1MONTH
+
+
 def Start():
   HTTP.CacheTime = CACHE_1DAY
-  #HTTP.CacheTime = CACHE_1MINUTE
+  Log("[cine-passion Agent] : Version 1.3")
+
+	
 
 class CinepassionAgent(Agent.Movies):
   name = 'Ciné-Passion'
   languages = ['fr', 'en']
+  accepts_from = ['com.plexapp.agents.localmedia']
   
   def search(self, results, media, lang):
 	
+	#temporary special case for Disney's
+	try: 
+		m = re.match('N° [0-9]* ([0-9]*) Walt Disney (.*)$', media.name)
+		if m:
+		  new_name, new_yearString = (m.group(2), m.group(1))
+		  Log('[cine-passion Agent] : DEBUG new_name : ' + new_name + ' | new_year : ' + new_yearString)
+		  media.name = new_name
+		  media.year = new_yearString
+	except:
+		Log("[cine-passion Agent] : Ciné-Passion Agent has return an error when managing the Disney Case.")
+		
   	#Launch search on media name using name without accents.
 	searchURL = CP_API_URL + CP_API_SEARCH % lang + CP_API_KEY + String.Quote(url = self.stripAccents(media.name.encode('utf-8')), usePlus = True)
 	
 	try:
-		searchXMLresult = XML.ElementFromURL(searchURL, cacheTime=CACHE_1DAY)
+		searchXMLresult = XML.ElementFromURL(searchURL, cacheTime=CP_CACHETIME_CP_SEARCH)
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(searchXMLresult, media.name.encode('utf-8'))
@@ -61,7 +80,16 @@ class CinepassionAgent(Agent.Movies):
 	
 	try:
 		#Ask for movie information
-		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO % lang + CP_API_KEY + metadata.id, cacheTime=CACHE_1DAY)
+		# Cache management to avoid consuming Ciné-Passion database quotas (about 300 per day)
+		pref_cache = Prefs["pref_cache"]
+		if pref_cache == "1 jour/day" :
+			CP_CACHETIME_CP_REQUEST = CACHE_1DAY
+		elif pref_cache == "1 semaine/week":
+			CP_CACHETIME_CP_REQUEST = CACHE_1WEEK
+		elif pref_cache == "1 mois/month":
+			CP_CACHETIME_CP_REQUEST = CACHE_1MONTH
+		Log('[cine-passion Agent] : requesting movie with ID "' + metadata.id + '" with cache time set to : ' + str(CP_CACHETIME_CP_REQUEST))
+		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO % lang + CP_API_KEY + metadata.id, cacheTime=CP_CACHETIME_CP_REQUEST)
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(updateXMLresult, metadata.title)
@@ -73,9 +101,7 @@ class CinepassionAgent(Agent.Movies):
 		if metadata.title != None :
 			Log("[cine-passion Agent] ERROR : Agent has return an unkown error wile retrieving information for '" + metadata.title +"'")
 		else :
-			Log("[cine-passion Agent] DEBUG : " + media.__repr__ )
-			Log("[cine-passion Agent] DEBUG : " + media.__str__)
-			Log("[cine-passion Agent] ERROR : Agent has return an unkown error wile retrieving information for '" + media.name +"'")
+			Log("[cine-passion Agent] ERROR : Agent has return an unkown error wile retrieving information for ID'" + metadata.id +"'")
 			
 	if (hasError == False) :
 		#genre
@@ -97,20 +123,22 @@ class CinepassionAgent(Agent.Movies):
 		# Just the first one is taken. Plex didn't manage more than one
 		metadata.studio = updateXMLresult.find('studios/studio').text 
 		
+		#runtime
 		runtime = int(updateXMLresult.find('runtime').text) * 60 * 1000           
-		metadata.title = updateXMLresult.find('title').text  
-	
+		
 		year = updateXMLresult.find('year').text
 		if year != "":
 			metadata.year = int(year)             
 	
+		#originally_available_at
+		metadata.originally_available_at = Datetime.ParseDate(year).date()
+		
 		#Original title.
 		originalTitle = updateXMLresult.find('originaltitle').text
 		metadata.original_title = originalTitle
 		
 		#title
-		#Doesn't work for the moment.
-		metadata.title = updateXMLresult.find('title').text
+		metadata.title = updateXMLresult.find('title').text.replace('&#39;','\'') # Patch to suppress some HTML code in title.
 		
 		#metadata.tagline = updateXMLresult.find('tagline').text  
 		#tagline tag ignored since there are not real tagline in Ciné-passion DDB
@@ -120,6 +148,9 @@ class CinepassionAgent(Agent.Movies):
 		#Posters and arts
 		@parallelize
 		def LoopForArtsFetching():
+			posters_valid_names = list()
+			art_valid_names = list()
+			
 			images = updateXMLresult.findall("images/image[@size='preview']")
 			indexImages = 1
 			for image in images:
@@ -131,23 +162,34 @@ class CinepassionAgent(Agent.Movies):
 					type = image.get('type')
 					if (type == 'Poster'):
 						try:
-							metadata.posters[url] = Proxy.Preview(HTTP.Request(thumbUrl, cacheTime=CACHE_1MONTH), sort_order = indexImages)
+							#Check if main image exist
+							f = urllib2.urlopen(url)
+							test = f.info().gettype()
+							
+							metadata.posters[url] = Proxy.Preview(HTTP.Request(thumbUrl, cacheTime=CP_CACHETIME_CP_FANART), sort_order = indexImages)
+							posters_valid_names.append(url)
 						except	Exception, e :
 							Log("[cine-passion Agent] : EXCEPT3 " + str(e))
-							Log('[cine-passion Agent] Error when fetching ' + thumbUrl)
+							Log('[cine-passion Agent] Error when fetching ' + thumbUrl + ' or '+ url)
 					elif (type == 'Fanart'):
 						try:
-							metadata.art[url] = Proxy.Preview(HTTP.Request(thumbUrl, cacheTime=CACHE_1MONTH), sort_order = indexImages)
-							#Log('[cine-passion Agent] Fetching ' + thumbUrl + ' with order to : ' + str(indexImages))
+							#Check if main image exist
+							f = urllib2.urlopen(url)
+							test = f.info().gettype()
+							
+							metadata.art[url] = Proxy.Preview(HTTP.Request(thumbUrl, cacheTime=CP_CACHETIME_CP_FANART), sort_order = indexImages)
+							art_valid_names.append(url)
 						except	Exception, e :
 							Log("[cine-passion Agent] : EXCEPT4 " + str(e))
-							Log('[cine-passion Agent] Error when fetching ' + thumbUrl)
+							Log('[cine-passion Agent] Error when fetching ' + thumbUrl + ' or '+ url)
 				indexImages = indexImages + 1
-		
-		#Rating source selection is done here since there is no user options until now
-		rating_source = "allocine"
-		#rating_source = "imdb"
-		#rating_source = "cinepassion"
+			
+			#supress old unsued pictures
+			metadata.posters.validate_keys(posters_valid_names)
+			metadata.art.validate_keys(art_valid_names)
+			
+		#Rating source selection done by pref pane.
+		rating_source = Prefs["pref_rating_source"]
 		metadata.rating = float(updateXMLresult.find("ratings/rating[@type='" + rating_source + "']").text.replace(',','.'))
 	
 		#roles              
@@ -159,12 +201,23 @@ class CinepassionAgent(Agent.Movies):
 			role.photo = person.get('thumb')
 			Log('[cine-passion Agent] Ajout d un personnage : ' + role.role + ' (' + role.actor + ')')
 	
+		#content_rating - Ciné-Passion manage France and USA ratings.
+		content_rating_source = Prefs["pref_content_rating"]
+		CP_content_rating = updateXMLresult.find("certifications/certification[@nation='" + content_rating_source + "']")
+		if CP_content_rating == None :
+			Log('[cine-passion Agent] : content rating ('+ content_rating_source + ') not found for ' + metadata.title +' ('+ metadata.id +')')
+		else :
+			if content_rating_source == "France" :
+				metadata.content_rating = 'fr/' + CP_content_rating.text
+			else :
+				metadata.content_rating = CP_content_rating.text
+			Log('[cine-passion Agent] : content rating ('+ content_rating_source + ') is "'+ metadata.content_rating +'" for ' + metadata.title +' ('+ metadata.id +')')
+		
 		### Tags not used   
 		#first_released : not in DDB    
 		#tags : not in DDB              
 		#trivia : not used       
 		#quotes : not in DDB             
-		#content_rating     
 		#content_rating_age 
 		#banners : not in DDB           
 		#themes : not in DDB             
@@ -183,7 +236,7 @@ class CinepassionAgent(Agent.Movies):
 		for movie in XMLresult.xpath("//movie"):
 			#find movie information (id, title and year)
 			id = movie.find('id').text
-			name = movie.find('title').text.replace('&#39;','\'').replace('&#338;', 'Œ') # Patch to suppress some HTML code in title.
+			name = movie.find('title').text.replace('&#39;','\'').replace('&#338;', 'Œ').replace('&amp;#338;', 'Œ') # Patch to suppress some HTML code in title.
 			originalName = movie.find('originaltitle').text
 			year = int(movie.find('year').text) 
 			lang = lang
@@ -262,7 +315,7 @@ class CinepassionAgent(Agent.Movies):
 					results.Append(MetadataSearchResult(id =id, name=name, year=year, lang=lang, score=finalScore))
 					
 					# First results should be more acruate.
-					score = score - 1
+					score = score - CP_RESULT_POS_PENALITY
 					goodItem = goodItem + 1
 			
 				except Exception, e :
@@ -350,11 +403,11 @@ class CinepassionAgent(Agent.Movies):
 	#Control to evaluate the result.
 	scorePenalty = 0
 	if year > datetime.datetime.now().year:
-		scorePenalty = 25
+		scorePenalty = CP_DATE_PENALITY
 	
 	#If there is a date in the video file name compute the difference
 	if media.year:
-		scorePenalty = scorePenalty + abs(year - int(media.year)) * 3
+		scorePenalty = scorePenalty + abs(year - int(media.year)) * CP_COEFF_YEAR
 
 	#Use String distance as penalty. Use accents 
 	#nameDist = Util.LevenshteinDistance(self.stripAccents(media.name.lower()), self.stripAccents(name.lower()))
@@ -362,9 +415,8 @@ class CinepassionAgent(Agent.Movies):
 	nameDist = Util.LevenshteinDistance(media.name.lower(), name.lower())
 	originalNameDist = Util.LevenshteinDistance(media.name.lower(), originalName.lower())
 	minDist = min(nameDist, originalNameDist)
-	scorePenalty = scorePenalty + minDist * 2
-#	Log('media : '+ name)
-#	Log('DEBUG nameDist: '+ str(nameDist))
+	scorePenalty = scorePenalty + minDist * CP_COEFF_TITLE
+
 
 	return scorePenalty
 	
