@@ -1,9 +1,11 @@
 #
 # Plex Movie Metadata Agent using Ciné-passion database (French communauty)
-# V1.3 By oncleben31 (http://oncleben31.cc) - 2010
+# V1.4 By oncleben31 (http://oncleben31.cc) - 2010
 # 
 
 #TODO: Essayer de fair une Agent secondaire pour IMDB juste pour retrouver les informations de type text
+#TODO: ajouter prise en charge des sous titre.
+
 
 import datetime, unicodedata, re, urllib2
 
@@ -52,7 +54,7 @@ class CinepassionAgent(Agent.Movies):
 		Log("[cine-passion Agent] : Ciné-Passion Agent has return an error when managing the Disney Case.")
 		
   	#Launch search on media name using name without accents.
-	searchURL = CP_API_URL + CP_API_SEARCH % lang + CP_API_KEY + String.Quote(url = self.stripAccents(media.name.encode('utf-8')), usePlus = True)
+	searchURL = CP_API_URL + CP_API_SEARCH % lang + CP_API_KEY + String.Quote(self.stripAccents(media.name.encode('utf-8')), usePlus = True)
 	
 	try:
 		searchXMLresult = XML.ElementFromURL(searchURL, cacheTime=CP_CACHETIME_CP_SEARCH)
@@ -213,12 +215,15 @@ class CinepassionAgent(Agent.Movies):
 				metadata.content_rating = CP_content_rating.text
 			Log('[cine-passion Agent] : content rating ('+ content_rating_source + ') is "'+ metadata.content_rating +'" for ' + metadata.title +' ('+ metadata.id +')')
 		
+		#collection
+		metadata.collections.clear()
+		metadata.collections.add(updateXMLresult.find('saga').text)
+		
 		### Tags not used   
 		#first_released : not in DDB    
 		#tags : not in DDB              
 		#trivia : not used       
 		#quotes : not in DDB             
-		#content_rating_age 
 		#banners : not in DDB           
 		#themes : not in DDB             
 	
