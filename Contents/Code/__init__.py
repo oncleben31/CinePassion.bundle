@@ -1,6 +1,6 @@
 #
 # Plex Movie Metadata Agent using Ciné-passion database (French communauty)
-# V1.4 By oncleben31 (http://oncleben31.cc) - 2010
+# V1.5 By oncleben31 (http://oncleben31.cc) - 2010
 # 
 
 #TODO: Essayer de fair une Agent secondaire pour IMDB juste pour retrouver les informations de type text
@@ -31,14 +31,14 @@ CP_CACHETIME_CP_FANART = CACHE_1MONTH
 
 def Start():
   HTTP.CacheTime = CACHE_1DAY
-  Log("[cine-passion Agent] : Version 1.3")
+  Log("[cine-passion Agent] : Version 1.5")
 
 	
 
 class CinepassionAgent(Agent.Movies):
   name = 'Ciné-Passion'
   languages = ['fr', 'en']
-  accepts_from = ['com.plexapp.agents.localmedia']
+  accepts_from = ['com.plexapp.agents.localmedia', 'com.plexapp.agents.opensubtitles']
   
   def search(self, results, media, lang):
 	
@@ -216,8 +216,11 @@ class CinepassionAgent(Agent.Movies):
 			Log('[cine-passion Agent] : content rating ('+ content_rating_source + ') is "'+ metadata.content_rating +'" for ' + metadata.title +' ('+ metadata.id +')')
 		
 		#collection
+		Log('[cine-passion Agent] : pref_ignore_collection  is "'+ str(Prefs["pref_ignore_collection"]) +'"')
 		metadata.collections.clear()
-		metadata.collections.add(updateXMLresult.find('saga').text)
+		if Prefs["pref_ignore_collection"] == False:
+			if updateXMLresult.find('saga').text != None :
+				metadata.collections.add(updateXMLresult.find('saga').text)
 		
 		### Tags not used   
 		#first_released : not in DDB    

@@ -20,5 +20,11 @@
                 "type":         "enum",
                 "values":       ["1 jour/day", "1 semaine/week", "1 mois/month"],
                 "default":      "1 semaine/week"
-        }
+        },
+		{
+				"id": "pref_ignore_collection",
+				"label": "Ignore Collections",
+				"type": "bool",
+				"default":	"false"
+		}
 ]
