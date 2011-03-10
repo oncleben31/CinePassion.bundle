@@ -1,6 +1,6 @@
 #
 # Plex Movie Metadata Agent using Ciné-passion database (French communauty)
-# V1.5 By oncleben31 (http://oncleben31.cc) - 2010
+# V1.6 By oncleben31 (http://oncleben31.cc) - 2011
 # 
 
 #TODO: Essayer de fair une Agent secondaire pour IMDB juste pour retrouver les informations de type text
@@ -14,8 +14,8 @@ CP_API_KEY = '38ca89564b2259401518960f7a06f94b/'
 # ask a free one on this page : http://passion-xbmc.org/demande-clef-api-api-key-request/
 
 CP_API_URL = 'http://passion-xbmc.org/scraper/API/1/'
-CP_API_SEARCH = 'Movie.Search/Title/%s/XML/'
-CP_API_INFO = 'Movie.GetInfo/ID/%s/XML/'
+CP_API_SEARCH = 'Movie.Search/%s/%s/Title/%s/XML/'
+CP_API_INFO = 'Movie.GetInfo/%s/%s/ID/%s/XML/'
 
 GOOGLE_JSON_URL = 'http://ajax.googleapis.com/ajax/services/search/web?v=1.0&rsz=large&q=%s'
 BING_JSON_URL   = 'http://api.bing.net/json.aspx?AppId=BAFE92EAA23CD237BCDAA5AB39137036739F7357&Version=2.2&Query=%s&Sources=web&Web.Count=8&JsonType=raw'
@@ -31,7 +31,7 @@ CP_CACHETIME_CP_FANART = CACHE_1MONTH
 
 def Start():
   HTTP.CacheTime = CACHE_1DAY
-  Log("[cine-passion Agent] : Version 1.5")
+  Log("[cine-passion Agent] : Version 1.6")
 
 	
 
@@ -54,7 +54,7 @@ class CinepassionAgent(Agent.Movies):
 		Log("[cine-passion Agent] : Ciné-Passion Agent has return an error when managing the Disney Case.")
 		
   	#Launch search on media name using name without accents.
-	searchURL = CP_API_URL + CP_API_SEARCH % lang + CP_API_KEY + String.Quote(self.stripAccents(media.name.encode('utf-8')), usePlus = True)
+	searchURL = CP_API_URL + CP_API_SEARCH % (Prefs["pref_user_login"], Prefs["pref_user_passwd"], lang) + CP_API_KEY + String.Quote(self.stripAccents(media.name.encode('utf-8')), usePlus = True)
 	
 	try:
 		searchXMLresult = XML.ElementFromURL(searchURL, cacheTime=CP_CACHETIME_CP_SEARCH)
@@ -91,7 +91,7 @@ class CinepassionAgent(Agent.Movies):
 		elif pref_cache == "1 mois/month":
 			CP_CACHETIME_CP_REQUEST = CACHE_1MONTH
 		Log('[cine-passion Agent] : requesting movie with ID "' + metadata.id + '" with cache time set to : ' + str(CP_CACHETIME_CP_REQUEST))
-		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO % lang + CP_API_KEY + metadata.id, cacheTime=CP_CACHETIME_CP_REQUEST)
+		updateXMLresult = XML.ElementFromURL(CP_API_URL + CP_API_INFO % (Prefs["pref_user_login"], Prefs["pref_user_passwd"], lang) + CP_API_KEY + metadata.id, cacheTime=CP_CACHETIME_CP_REQUEST)
 	
 		#Test if DDB have return an error
 		hasError = self.checkErrors(updateXMLresult, metadata.title)

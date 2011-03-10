@@ -1,6 +1,17 @@
 [
-
         {
+				"id":		"pref_user_login",
+				"label":	"Login",
+				"type":		"text",
+				"default":	"login"
+		},
+        {
+				"id":		"pref_user_passwd",
+				"label":	"Password / Mot de Passe",
+				"type":		"text",
+				"default":	"password"
+		},
+		{
                 "id":                   "pref_rating_source",
                 "label":                "Rating/Notations source",
                 "type":         "enum",
